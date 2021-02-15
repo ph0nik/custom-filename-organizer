@@ -1,0 +1,67 @@
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scan folders 1.0</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body>
+    <nav>
+        <a href="/">queue</a>
+        <a href="/links">links</a>
+    </nav>
+
+    <% if (queueArray.length> 0) { %>
+        <h2>Found <%= queueArray.length %> new files.</h2>
+        <% queueArray.forEach((query, queryIndex)=> { %>
+            <h3 class="id">
+                [<%= query.id %>]
+                    <%= query.filepath %>
+            </h3>
+            <div>Custom query:
+                <form action="/" method="POST">
+                    <input type="hidden" name="type" value="search">
+                    <input type="hidden" name="id" value="<%=query.id %>">
+                    <input type="text" placeholder="Send custom query for this file:" name="query">                    
+                    <button type="submit">Search</button>
+                </form>
+            </div>
+            <form action="/" method="POST">
+                <table>
+                    <input type="hidden" name="type" value="select">
+                    <input type="hidden" name="id" value="<%=query.id %>">
+                    <tr>
+                        <th>Index</th>
+                        <th>Title</th>
+                        <th>Found description</th>
+                    </tr>
+                    <% query.results.forEach((element, index)=> { %>
+                        <tr>
+                            <td>
+                                
+                                <input type="radio" name="index" value="<%= index %>">
+                                <%= index %>
+                            </td>
+                            <td>
+                                <%= element.title %>
+                            </td>
+                            <td>
+                                <%= element.desc %>
+                            </td>
+                        </tr>
+                        <% }); %>
+                </table>
+                <div>
+                    <button type="submit">Submit selection</button>
+                </div>
+            </form>
+
+            <% }) %>
+                <% } else { %>
+                    <p>There are no elements in the queue.</p>
+                    <% } %>
+</body>
+
+</html>

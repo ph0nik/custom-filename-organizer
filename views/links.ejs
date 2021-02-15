@@ -1,0 +1,53 @@
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scan folders 1.0</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body>
+    <nav>
+        <a href="/">queue</a>
+        <a href="/links">links</a>
+    </nav>
+
+    <% if (links.length> 0) { %>
+        <h2>There are <%= links.length %> created links.</h2>
+
+        <table>
+            <tr>
+                <th>Index</th>
+                <th>Original file</th>
+                <th>separator</th>
+                <th>Symlink</th>
+                <th>Repeat search</th>
+            </tr>
+            <% links.forEach((linkObj, linkIndex)=> { %>
+                <form action="/links" method="POST">
+                <tr>
+                    <input type="hidden" name="id" value="<%= linkObj.id%>">
+                    <td>
+                        <%= linkIndex %>
+                    </td>
+                    <td>
+                        <%= linkObj.file %>
+                    </td>
+                    <td>-></td>
+                    <td>
+                        <%= linkObj.link %>
+                    </td>
+                    <td>
+                        <button type="submit">Go!</button>
+                    </td>
+                </tr>
+                </form>
+                <% }) %>
+        </table>
+        <% } else { %>
+            <p>There are no links to show.</p>
+            <% } %>
+</body>
+
+</html>
