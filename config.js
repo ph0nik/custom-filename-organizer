@@ -1,13 +1,17 @@
-const config = {
-    dirs: {
-        queueFolder: "./queue/",
-        symLinkFolder: 'G:\\JavaScript\\node-crash-course-ninja\\symlink\\',
-        sourceDirectory: 'G:\\JavaScript\\node-crash-course-ninja\\watchtest',
-        links: "./links/"
 
+//TODO add file naming pattern
+// 
+const config = {
+    user: {
+        symLinkFolder: "g:\\JavaScript\\disk-crawler\\test\\symlink\\",
+        sourceDirectory: "G:\\JavaScript\\disk-crawler\\test\\watchlist\\"
+    },
+    dirs: {
+        queueFolder: "./data/queue/",            
+        links: "./data/links/"
     },
     files: {
-        filesList: './database.json',
+        filesList: "./data/database.json",
     },
     urls: {
         search_a: 'https://html.duckduckgo.com/html/?q=site%3Athemoviedb.org%2Fmovie+',
