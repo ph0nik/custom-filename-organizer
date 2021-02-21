@@ -133,7 +133,7 @@ watcher
         if (isVideoFile(path)) {
             log(new Date(Date.now()), '| File | ', path, '| changed');
             tempArray.push(getPathObject(path));
-            updateFilesList();
+            updateFilesList(tempArray);
             tempArray = [];
         }
     })

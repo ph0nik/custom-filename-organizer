@@ -13,19 +13,23 @@
         <a href="/links">links</a>
         <a href="/setup">setup</a>
     </nav>
-    <h1>Folder paths are missing.</h1></Folder>
+    <h1>Folder paths are missing.</h1>
+    </Folder>
     <p>
-         TODO
+        TODO
 
         Please enter folder path or list of folders paths to be watched, and path for storing created symlinks.
     </p>
     <p>
         Current source directory:<br>
         <%= links.source %><br>
-        Current symlink folder:<br>
-        <%= links.symlink%>
-
+            Current symlink folder:<br>
+            <%= links.symlink%>
     </p>
+    <form action="/setup" id="cleanup" method="POST" >
+        <input type="hidden" name= "cleanup" form="cleanup" value="true">
+        <button form="cleanup" type="submit">CleanUp!</button>
+    </form>
 </body>
 
 </html>

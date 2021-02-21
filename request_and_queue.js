@@ -24,7 +24,7 @@ function getFileName(f) {
 
 // create url link with given search phrase
 function createSearchUrl(f) {
-	return config.urls.search_a + getFileName(f)+ '+ overview' + config.urls.search_b;
+	return config.urls.search_a + getFileName(f) + '+ overview' + config.urls.search_b;
 }
 
 var testObj = { "id": "ctt7lvmKRN", "path": "G:\\JavaScript\\node-crash-course-ninja\\watchtest\\Upstream.Color.2013.BRRIP.XVID-AC3-PULSAR-sample.avi" };
@@ -51,6 +51,7 @@ async function titlesLookUp(n) {
 	}
 	try {
 		// get results from external source
+		// TODO add catch error timeout
 		const response = await got(searchUrl, options);
 		const webResults = await parser.getResultsList(response.body);
 
@@ -59,11 +60,19 @@ async function titlesLookUp(n) {
 		log(queueFileName);
 
 		// TODO change to async perhaps?
-		fs.writeFile(queueFileName, JSON.stringify(webResults), function (err) {
-			if (err) log(err);
-			log(new Date(Date.now()), '|', queueFileName, '| Queue updated')
-		});
+		fs.writeFile(queueFileName, JSON.stringify(webResults))
+			.then(() => {
+				log('[titlesLookUp(n)] ',new Date(Date.now()), '|', queueFileName, '| Queue updated')
+			})
+			.catch((err) => {
+				log(err);
+			})
+		// fs.writeFile(queueFileName, JSON.stringify(webResults), function (err) {
+		// 	if (err) log(err);
+		// 	log(new Date(Date.now()), '|', queueFileName, '| Queue updated')
+		// });
 	} catch (error) {
+
 		errObj = [{
 			'title': 'ERROR',
 			'link': '',

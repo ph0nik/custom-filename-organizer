@@ -84,13 +84,12 @@ app.get('/setup', (req, res) => {
 });
 
 app.post('/setup', async (req, res) => {
-    log(req.body);
+    // log(req.body);
     let action = req.body;    
-    if (action.hasOwnProperty('clean-button')) {
-        fileService.cleanUp();
+    if (action.hasOwnProperty('cleanup')) {
+        await fileService.cleanUp();
     }
-    
-
+    res.redirect('/setup');
 })
 
 app.get('/', (req, res) => {
@@ -148,7 +147,7 @@ const compareSearchObject = (obj) => {
 }
 
 app.post('/', async (req, res) => {
-    log(req.body);
+    log(`[app.post('/']${req.body}`);
     let selection = req.body;
     if (selection.type === 'search' ) {
         // check if this exact selection was performed last time

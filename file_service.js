@@ -35,11 +35,6 @@ function saveSymlinkInfo(objectPath, linkPath, objectId) {
     })
 }
 
-// creates symlink absolute path
-function createSymLinkPath(n, fileExt) {
-    return symLinkFolder + n.title + '\\' + n.title + ' [tmbdid=' + n.link + ']' + fileExt;
-}
-
 // delete position from existing queue
 function deleteQueueElement(queueFileName) {
     fsprom.unlink(queueFileName)
@@ -49,10 +44,24 @@ function deleteQueueElement(queueFileName) {
         .catch((err) => log(err));
 }
 
+//TODO deal with illegal characters
+function characterPrison(phrase) {
+    let illegalChars = /[/?<>\:*"]/g;
+    return phrase.replace(illegalChars, '_');
+}
+
+// / ? < > \ : * | "
 // creates symlink folder absolute path
 function createSymLinkFolder(n) {
-    log(`[createSymLinkFolder]${symLinkFolder + n.title}`);
-    return symLinkFolder + n.title
+    friendlyTitle = characterPrison(n.title);
+    log(`[createSymLinkFolder]${symLinkFolder + friendlyTitle}`);
+    return symLinkFolder + friendlyTitle;
+}
+
+// creates symlink absolute path
+function createSymLinkPath(n, fileExt) {
+    friendlyTitle = characterPrison(n.title);
+    return symLinkFolder + friendlyTitle + '\\' + friendlyTitle + ' [tmbdid=' + n.link + ']' + fileExt;
 }
 
 // promise wrapper around read file function
@@ -132,6 +141,7 @@ const cleanUp = async function () {
         // get the files from db
         const data = await fsprom.readFile(filesList, 'utf8');
         const parsed = JSON.parse(data);
+        let dirCounter = 0;
         // runs access check on all the paths in the given file
         const tempArr = await Promise.all(parsed.map(async (elem) => {
             try {
@@ -143,14 +153,18 @@ const cleanUp = async function () {
                 // if file is not found, element is marked with 'delete' statement and returned
                 if (err.code === 'ENOENT') {
                     log(`[cleanUp][${elem.path}] not found`);
+                    dirCounter++;
                     return elem = { id: elem.id, path: 'delete' };
                 }
             }
         }))
+        log(`[cleanUp] Directory checkup finished, found ${dirCounter} invalid directories.`);
+        let linkCounter = 0;
         /// deletes all elements from queue, that have been marked above
         tempArr.forEach((elem) => {
             const qe = `${queueFolder}${elem.id}.json`;
             if (elem.path === 'delete') {
+                linkCounter++;
                 fsprom.unlink(qe)
                     .catch(err => {
                         if (err.code === 'ENOENT') {
@@ -161,19 +175,23 @@ const cleanUp = async function () {
                     })
             }
         })
+        log(`[cleanUp] ${linkCounter} invalid queue links deleted.`)
         // delete objects pointing to non existing files
         const output = tempArr.filter((el) => { return el.path != 'delete' });
         // get list of files from queue folder
         const files = await fsprom.readdir(queueFolder);
+        linkCounter = 0;
         // delete all queue files that are not present in db
         for (const file of files) {
             if (output.find(x => x.id === file.split('.')[0]) === undefined) {
+                linkCounter++;
                 fsprom.unlink(queueFolder + file)
                     .then(() => {
                         log(`[cleanUp] File ${file} deleted`);
                     });
             }
         }
+        log(`[cleanUp] ${linkCounter} invalid queue links deleted.`);
         // save new file decsriptors to file
         await fsprom.writeFile(filesList, JSON.stringify(output));
     } catch (err) {
@@ -213,7 +231,7 @@ const createSymLink = async (elementId, queueElementIndex) => {
                         .then(() => {
                             // save symlink info - operation id, original file path and symlink path
                             saveSymlinkInfo(objectPath, symLinkPath, elementId);
-                            log('[createSymLink]', new Date(Date.now()), objectPath, ' -> ', symLinkPath, '| link created.');
+                            log('[createSymLink]', new Date(Date.now()), symLinkPath, '| link created.');
                             // delete queue file
                             deleteQueueElement(queueFileName);
                         })

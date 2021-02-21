@@ -6,6 +6,8 @@ var titleStringClass = '.result__a';
 var resultDescriptionClass = '.result__snippet';
 var linkAttribute = 'href';
 
+// shortens reference to console object
+const log = console.log.bind(console);
 
 // extracts id of given result
 function linkSlicer(i) {
@@ -50,9 +52,9 @@ var getResultsList = async (htmlSource) => {
 
         // checks if it has first class that we are looking for, if not, function breaks and returns empty array
         if ($(titleStringClass).hasClass(titleStringClass.slice(1))) {
-            console.log('document ok!');
+            log(`[getResultsList] Document structure is correct.`)
         } else {
-            console.log('Required class missing! => ', titleStringClass);
+            log(`[getResultsList] missing document class: ${titleStringClass}`);
             // return [];
             reject([]);
         }
