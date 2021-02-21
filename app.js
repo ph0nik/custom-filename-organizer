@@ -113,7 +113,7 @@ app.get('/', (req, res) => {
                             found = data.find(obj => obj.id === elem.id);
                             if (found === undefined) {
                                 elem.filepath = 'NOT FOUND';
-                                log(`ID [${elem.id}] not found in database.json!`);
+                                log(`[app.get('/')] ID [${elem.id}] not found in database.json!`);
                             } else {
                                 elem.filepath = found.path;
                             }
@@ -123,7 +123,7 @@ app.get('/', (req, res) => {
                     })
                 // catching any rejects from promises
             }).catch((err) => {
-                log(err);
+                log(`[app.get('/')]${err}`);
             });
     } else {
         res.redirect('/setup');
@@ -131,11 +131,32 @@ app.get('/', (req, res) => {
 
 })
 
+// temporary object to store last search parameters
+let cachedSearchObject = {
+    type: '',
+    id: '',
+    query: ''
+}
+
+// compares values of temporary object to the one passed via POST method
+const compareSearchObject = (obj) => {
+    if (cachedSearchObject.id === obj.id && cachedSearchObject.query === obj.query) return true;
+    else {
+        cachedSearchObject = obj;
+        return false
+    };
+}
+
 app.post('/', async (req, res) => {
     log(req.body);
     let selection = req.body;
-    if (selection.type === 'search') {
-        const search = await request.manualSearch(selection.id, selection.query);
+    if (selection.type === 'search' ) {
+        // check if this exact selection was performed last time
+        if (compareSearchObject(selection)) {
+            log(`[app.post('/'] Search ignored due to repeated values`);
+        } else {
+            const search = await request.manualSearch(selection.id, selection.query);
+        }
     } else if (selection.type === 'select') {
         const search = await fileService.createSymLink(selection.id, selection.index);
     }
