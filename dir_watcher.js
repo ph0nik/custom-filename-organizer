@@ -4,6 +4,7 @@ const fsprom = require('fs/promises');
 const request = require('./request_and_queue');
 const nanoid = require('nanoid');
 const config = require('./config')
+const fileService = require('./file_service');
 
 // var sourceDirectory = 'G:\\JavaScript\\node-crash-course-ninja\\watchtest';
 const sourceDirectory = config.user.sourceDirectory;
@@ -45,23 +46,23 @@ function getPathObject(path) {
     }
 };
 
-var tempArray = [];
+var pathList = [];
 
 const updateFilesList = async (arr) => {
     try {
         const data = await fsprom.readFile(filesList, 'utf8');
-         diskData = (data.length == 0) ? [{ id: '', path: '' }] : JSON.parse(data);
+        diskData = (data.length == 0) ? [{ id: '', path: '' }] : JSON.parse(data);
         
         arr.forEach(x => {
             // If element already exists do nothing
             if (diskData.find(obj => obj.path == x.path) !== undefined) {
-                log(`${x.path} ignored`);                
+                log(`${new Date(Date.now()).toISOString()} | ${x.path} | ignored`);                
             } else {
                 // If element is new add it to list stored on disk
-                log(`${x.path} Found new element`);
+                log(`${new Date(Date.now()).toISOString()} | ${x.path} | new element`);
                 request.titlesLookUp(x);
                 diskData = [...diskData, x];
-                log(new Date(Date.now()), '| File | ', x.path, '| saved')
+                log(`${new Date(Date.now()).toISOString} | ${x.path} | saved`);
             }
         })
         fsprom.writeFile(filesList, JSON.stringify(diskData))
@@ -69,83 +70,62 @@ const updateFilesList = async (arr) => {
         
     } catch (err) {
         if (err.code == 'ENOENT') {
-            log(`IN: Dir-watcher ${filesList}file does not exsist!`);
+            log(`[updateFilesList] ${filesList} file does not exsist!`);
         }
         log(err);
     }
 }
 
-function updateFilesList_bak() {
-    fs.readFile(filesList, 'utf8', function (err, data) {
-        if (err) {
-            if (err.code == 'ENOENT') {
-                log(`IN: Dir-watcher ${filesList}file does not exsist!`);
-                return;
-            }
-            return log(err);
-        }
-        // parse json object from a file and write to variable -> create error handling for malformed jason
-        try {
-            if (data.length == 0) {
-                diskData = [{ id: '', path: '' }];
-            } else {
-                diskData = JSON.parse(data);
-            }
-        } catch (err) {
-            log(err.toString());
-            log(new Date(Date.now()), '| element ignored');
-            // tempArray = [];
-            return;
-        }
+const deleteSymLink = async function (path) {
+    // const deleteSymLink = async function (elementId, search)
+    try {
+        const data = await fsprom.readFile(filesList, 'utf8');
+        const filesArr = JSON.parse(data);
+        const elem = filesArr.find(x => x.path === path);
+        await fileService.deleteOnly(elem.id);
+        log(`${new Date(Date.now()).toISOString()} ${path} | tracks deleted`);
 
-        tempArray.forEach(x => {
-            if (diskData.find(obj => obj.path == x.path)) {
-                log(x.path, ' ignored');
-                // If element already exists do nothing
-            } else {
-                // If element is new add it to list stored on disk
-                log('Found new element')
+    } catch(err) {
+        log(err);
+    }
+    
 
-                request.titlesLookUp(x);
-                diskData = [...diskData, x];
-                // diskData.push(x);
-                log(new Date(Date.now()), '| File | ', x.path, '| saved')
-            }
-        })
-        fs.writeFile(filesList, JSON.stringify(diskData), function (err) {
-            if (err) log(err);
-
-        });
-    })
-};
+    // fileService.deleteSymLink
+}
 
 // starts the watcher with specified actions on different events
 watcher
     // in case of file added
     .on('add', path => {
         if (isVideoFile(path)) {
-            log(new Date(Date.now()), '| File | ', path, '| added');
+            log(`${new Date(Date.now()).toISOString()} | ${path} | added`);
             // TODO change the way objects are added to array
-            tempArray.push(getPathObject(path));
+            pathList.push(getPathObject(path));
         }
     })
     .on('change', path => {
         if (isVideoFile(path)) {
-            log(new Date(Date.now()), '| File | ', path, '| changed');
-            tempArray.push(getPathObject(path));
-            updateFilesList(tempArray);
-            tempArray = [];
+            log(`${new Date(Date.now()).toISOString()} | ${path} | changed`);
+            pathList.push(getPathObject(path));
+            updateFilesList(pathList);
+            pathList = [];
         }
     })
     // in case of file delete
     .on('unlink', path => {
+        if (isVideoFile(path)) {
+            log(`${new Date(Date.now()).toISOString()} | ${path} | deleted`);
+            // TODO
+            // after deleting and adding the same file it doesn't go to the queue
+            deleteSymLink(path);
+        }
         // find file in db and delete symlink
     })
     .on('error', error => log('Watcher error:', error))
     // after initial scan
     .on('ready', () => {
         log(new Date(Date.now()), 'Scanning finished | ready!');
-        updateFilesList(tempArray);
+        updateFilesList(pathList);
         // tempArray = [];
     });
 

@@ -3,8 +3,8 @@
 // 
 const config = {
     user: {
-        symLinkFolder: "g:\\JavaScript\\disk-crawler\\test\\symlink\\",
-        sourceDirectory: "G:\\JavaScript\\disk-crawler\\test\\watchlist\\"
+        symLinkFolder: "g:\\JavaScript\\disk-crawler\\test\\symlink\\", // user symlink folder
+        sourceDirectory: "G:\\JavaScript\\disk-crawler\\test\\watchlist\\" // user watched folder
     },
     dirs: {
         queueFolder: "./data/queue/",            

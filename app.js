@@ -178,6 +178,7 @@ app.get('/links', (req, res) => {
 
 app.post('/links', (req, res) => {
     log(req.body);
+    // TODO delete and search
 })
 
 app.use((req, res) => {

@@ -1,5 +1,6 @@
 const fs = require('fs');
 const fsprom = require('fs/promises');
+const { toUnicode } = require('punycode');
 const config = require('./config');
 const request = require('./request_and_queue');
 
@@ -86,6 +87,9 @@ fs.readfileAsync = (filename) => {
     })
 };
 
+// TODO
+// function checking if data folder exists and creating them at every initial run
+
 function deleteAndSearch(elementId) {
     deleteSymLink(elementId, true);
 }
@@ -93,6 +97,7 @@ function deleteAndSearch(elementId) {
 function deleteOnly(elementId) {
     deleteSymLink(elementId, false);
 }
+
 // delete existing symlink > send request > add to queue
 const deleteSymLink = async function (elementId, search) {
     const linkFile = `${linksFolder}${elementId}.json`;
@@ -108,7 +113,7 @@ const deleteSymLink = async function (elementId, search) {
         await fsprom.rmdir(extractedFolderPath);
         // delete file containing information about link
         await fsprom.unlink(linkFile);
-        log(`new Date(Date.now()) ${extractedFilePath} link deleted.`);
+        log(`${new Date(Date.now()).toISOString()} ${extractedFilePath} link deleted.`);
         if (search) {
             // create look up object
             const lookUpObject = {
@@ -119,6 +124,9 @@ const deleteSymLink = async function (elementId, search) {
             request.titlesLookUp(lookUpObject);
         }
     } catch (err) {
+        if (err.code === 'ENOENT' && err.path === linkFile) {
+            log(`${new Date(Date.now()).toISOString()} | ${linkFile} | no links for this file found`);
+        }
         log(err);
     }
 }
@@ -257,87 +265,4 @@ const createSymLink = async (elementId, queueElementIndex) => {
 
 }
 
-testObj = { type: 'select', id: 'AXDokRIFH-', index: '2' }
-// createSymLink(testObj.id, testObj.index);
-
-// function createSymLink_bak(elementId, queueElementIndex) {
-//     // get file path by id
-//     fs.readFile(filesList, 'utf8', (err, fileData) => {
-//         if (err) {
-//             // check if file is present
-//             if (err.code == 'ENOENT') {
-//                 log(`file-service -> ${filesList}file does not exsist!`);
-//                 return;
-//             }
-//             return log(err);
-//         }
-//         try {
-//             diskData = JSON.parse(fileData);
-//         } catch (err) {
-//             log(err.toString());
-//             return;
-//         }
-//         // check if object with given id is present on the list retrieved from a file
-//         let objectById = diskData.filter(x => {
-//             return x.id === elementId;
-//         });
-//         if (objectById.length === 0) {
-//             log(`${new Date(Date.now())} No matching objects found in file: ${filesList}`);
-//             // delete from queue
-//         } else {
-//             // get file path
-//             objectPath = objectById[0].path;
-//             // extract file extension
-//             objectExtension = objectPath.slice(objectPath.lastIndexOf('.'), objectPath.length);
-//         }
-
-//         // relative path
-//         const queueFileName = `${queueFolder}${elementId}.json`;
-//         // get result values from file with matching id
-//         fs.readFile(queueFileName, 'utf8', (err, qdata) => {
-//             if (err) {
-//                 if (err.code == 'ENOENT') {
-//                     log(`${queueFileName} file does not exsist!`);
-//                     return;
-//                 } else {
-//                     log(err);
-//                     return;
-//                 }
-//             }
-//             try {
-//                 queueElementResults = JSON.parse(qdata);
-//                 // singleResult = JSON.parse(qdata);
-//             } catch (err) {
-//                 log(err.toString());
-//                 return;
-//             }
-//             // create symlink path with given element index
-
-//             const symLinkFolder = createSymLinkFolder(queueElementResults[queueElementIndex]);
-//             // create folder
-//             fs.mkdir(symLinkFolder, (err) => {
-//                 if (!err || err.code === 'EEXIST') {
-//                     const symLinkPath = createSymLinkPath(queueElementResults[queueElementIndex], objectExtension);
-//                     // create symlink
-//                     fs.symlink(objectPath, symLinkPath, (err) => {
-//                         if (err && err.code === 'EEXIST') {
-//                             log('Symlink already exists!');
-//                         } else if (err) {
-//                             log(err);
-//                         } else {
-//                             // save symlink info - operation id, original file path and symlink path
-//                             saveSymlinkInfo(objectPath, symLinkPath, elementId);
-//                             log(new Date(Date.now()), objectPath, ' -> ', symLinkPath, '| symlink created.');
-//                             // delete queue file
-//                             deleteQueueElement(queueFileName);
-//                         }
-//                     })
-//                 } else {
-//                     log(err);
-//                 }
-//             });
-//         })
-//     })
-// };
-
-module.exports = { createSymLink, deleteSymLink, cleanUp }
+module.exports = { createSymLink, deleteSymLink, cleanUp, deleteOnly }
