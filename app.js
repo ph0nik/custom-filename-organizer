@@ -1,10 +1,10 @@
 const express = require('express');
 const fs = require('fs');
-const fsa = require('fs/promises');
-const request = require('./request_and_queue');
+const fsprom = require('fs/promises');
+const requestService = require('./request_service');
 const testParser = require('./parser');
 const fileService = require('./file_service');
-const dirWatcher = require('./dir_watcher');
+const directoryService = require('./dir_watcher');
 
 const config = require('./config');
 const queueFolder = config.dirs.queueFolder;
@@ -24,17 +24,19 @@ function areFoldersSet() {
     return sourceDirectory === '' || symLinkFolder === '' ? false : true;
 }
 
-// register view engine
-app.set('view engine', 'ejs');
+let watch = directoryService.loadChokidar(); // load directory watcher module
 
-// listen for request = start server
-app.listen(config.server.port);
 
-// set up folder for static files
-app.use(express.static('public'));
 
-// function gets data and turns it into a object
-app.use(express.urlencoded({ extended: true }));
+app.set('view engine', 'ejs'); // register view engine
+
+// app.set('dirWatch', watch);
+
+app.listen(config.server.port); // listen for request = start server
+
+app.use(express.static('public')); // set up folder for static files
+
+app.use(express.urlencoded({ extended: true })); // function gets data and turns it into a object
 
 // promise wrapper around read files in directory function
 fs.readdirAsync = (dirname) => {
@@ -84,46 +86,32 @@ app.get('/setup', (req, res) => {
 });
 
 app.post('/setup', async (req, res) => {
-    // log(req.body);
-    let action = req.body;    
+    log(req.body);
+    let action = req.body;
     if (action.hasOwnProperty('cleanup')) {
         await fileService.cleanUp();
     }
     res.redirect('/setup');
 })
 
-app.get('/', (req, res) => {
+app.get('/', async (req, res) => {
     if (areFoldersSet()) {
-        fs.readdirAsync(queueFolder)
-            .then((filenames) => {
-                // extracting files IDs from list of files inside folder
-                queueFilesIds = filenames.map(elem => elem.split('.')[0]);
-                return Promise.all(filenames.map(getQueueFile));
-            })
-            .then((queueResults) => {
-                // pair file IDs with result lists found in queue folder
-                queueElementResults = queueFilesIds.map((elem, index) => {
-                    return { id: elem, filepath: '', results: queueResults[index] }
-                });
-                // get listed files data from database.json
-                fs.readfileAsync(filesList, 'utf8')
-                    .then((data) => {
-                        queueArray = queueElementResults.map((elem) => {
-                            found = data.find(obj => obj.id === elem.id);
-                            if (found === undefined) {
-                                elem.filepath = 'NOT FOUND';
-                                log(`[app.get('/')] ID [${elem.id}] not found in database.json!`);
-                            } else {
-                                elem.filepath = found.path;
-                            }
-                            return elem;
-                        })
-                        res.render('index', { queueArray });
-                    })
-                // catching any rejects from promises
-            }).catch((err) => {
-                log(`[app.get('/')]${err}`);
-            });
+        const filenames = await fsprom.readdir(queueFolder)
+            .catch((err) => { log(`[app.get('/')]${err}`); });
+        const queueFilesIds = filenames.map(elem => elem.split('.')[0]);
+        const queueResults = [];
+        for (const file of filenames.values()) {
+            let resList = await fsprom.readFile(queueFolder + file, 'utf8')
+                .catch((err) => { log(err); });
+            queueResults.push(JSON.parse(resList));
+        }
+        const dataMap = await fileService.loadDatabase();
+        const queueArray = queueFilesIds.map((elem, index) => {
+            let path = dataMap.get(elem);
+            if (path === undefined) log(`[app.get('/')] ID [${elem}] not found in database.json!`);
+            return { id: elem, filepath: path, results: queueResults[index] };
+        });
+        res.render('index', { queueArray });
     } else {
         res.redirect('/setup');
     }
@@ -149,12 +137,12 @@ const compareSearchObject = (obj) => {
 app.post('/', async (req, res) => {
     log(`[app.post('/']${req.body}`);
     let selection = req.body;
-    if (selection.type === 'search' ) {
+    if (selection.type === 'search') {
         // check if this exact selection was performed last time
         if (compareSearchObject(selection)) {
             log(`[app.post('/'] Search ignored due to repeated values`);
         } else {
-            const search = await request.manualSearch(selection.id, selection.query);
+            const search = await requestService.manualSearch(selection.id, selection.query);
         }
     } else if (selection.type === 'select') {
         const search = await fileService.createSymLink(selection.id, selection.index);
@@ -162,7 +150,7 @@ app.post('/', async (req, res) => {
     res.redirect('/');
 })
 
-app.get('/links', (req, res) => {    
+app.get('/links', (req, res) => {
     fs.readdirAsync(linkDirectory)
         .then((filenames) => {
             linksIds = filenames.map(elem => elem.split('.')[0])
@@ -176,9 +164,14 @@ app.get('/links', (req, res) => {
         })
 })
 
-app.post('/links', (req, res) => {
-    log(req.body);
-    // TODO delete and search
+app.post('/links', async (req, res) => {
+    // log(req.body);
+    let id = req.body.id;
+    let db = await fileService.loadDatabase();
+    let path = db.get(id);
+    await fileService.deleteSymLink(id, false);
+    directoryService.addPathElement(path);
+    res.redirect('/');
 })
 
 app.use((req, res) => {

@@ -4,7 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Scan folders 1.0</title>
-    <link rel="stylesheet" href="/styles.css">
+    <link href="/css/styles.css" rel="stylesheet" type="text/css">
+    <link rel="preconnect" href="https://fonts.gstatic.com">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
 </head>
 
 <body>
@@ -15,44 +17,51 @@
     </nav>
 
     <% if (queueArray.length> 0) { %>
-        <h2>Found <%= queueArray.length %> new files.</h2>
+        <h2>Found
+            <%= queueArray.length %> new files.
+        </h2>
         <% queueArray.forEach((query, queryIndex)=> { %>
             <h3 class="id">
-                [<%= query.id %>]
+                [
+                <%= query.id %>]
                     <%= query.filepath %>
             </h3>
             <div>Custom query:
-                <form action="/" method="POST">
+                <form class="tsearch" action="/" method="POST">
                     <input type="hidden" name="type" value="search">
                     <input type="hidden" name="id" value="<%=query.id %>">
-                    <input type="text" placeholder="Send custom query for this file:" name="query">                    
+                    <input type="text" placeholder="Send custom query for this file:" name="query">
                     <button type="submit">Search</button>
                 </form>
             </div>
             <form action="/" method="POST">
-                <table>
+                <table class="content-table">
                     <input type="hidden" name="type" value="select">
                     <input type="hidden" name="id" value="<%=query.id %>">
-                    <tr>
-                        <th>Index</th>
-                        <th>Title</th>
-                        <th>Found description</th>
-                    </tr>
-                    <% query.results.forEach((element, index)=> { %>
+                    <thead>
                         <tr>
-                            <td>
-                                
-                                <input type="radio" name="index" value="<%= index %>">
-                                <%= index %>
-                            </td>
-                            <td>
-                                <%= element.title %>
-                            </td>
-                            <td>
-                                <%= element.desc %>
-                            </td>
+                            <th>Index</th>
+                            <th>Title</th>
+                            <th>Found description</th>
                         </tr>
-                        <% }); %>
+                    </thead>
+                    <% query.results.forEach((element, index)=> { %>
+                        <tbody>
+                            <tr>
+                                <td>
+
+                                    <input type="radio" name="index" value="<%= index %>">
+                                    <%= index %>
+                                </td>
+                                <td>
+                                    <%= element.title %>
+                                </td>
+                                <td>
+                                    <%= element.desc %>
+                                </td>
+                            </tr>
+                            <% }); %>
+                        </tbody>
                 </table>
                 <div>
                     <button type="submit">Submit selection</button>

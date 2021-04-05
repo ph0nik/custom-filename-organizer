@@ -1,8 +1,9 @@
 const fs = require('fs');
 const fsprom = require('fs/promises');
-const { toUnicode } = require('punycode');
 const config = require('./config');
-const request = require('./request_and_queue');
+const request = require('./request_service');
+// const dirWatcher = require('./dir_watcher');
+const sleep = require('util').promisify(setTimeout);
 
 const symLinkFolder = config.user.symLinkFolder;
 const filesList = config.files.filesList;
@@ -24,16 +25,12 @@ var testObj = {
 
 
 // creates file with information about current symlink
-function saveSymlinkInfo(objectPath, linkPath, objectId) {
+const saveSymlinkInfo = (objectPath, linkPath, objectId) => {
     const writePath = linksFolder + objectId + '.json';
     const symLinkObj = { 'file': objectPath, 'link': linkPath };
-    fs.writeFile(writePath, JSON.stringify(symLinkObj), (err) => {
-        if (err) {
-            log(`[saveSymlinkInfo]${err}`);
-        } else {
-            log('[saveSymlinkInfo]', new Date(Date.now()), 'Symlink info saved for [', objectPath, ']');
-        }
-    })
+    fsprom.writeFile(writePath, JSON.stringify(symLinkObj))
+        .then(() => { log('[saveSymlinkInfo]', new Date(Date.now()), 'Symlink info saved for [', objectPath, ']'); })
+        .catch((err) => { log(`[saveSymlinkInfo] ${err}`); });
 }
 
 // delete position from existing queue
@@ -45,7 +42,7 @@ function deleteQueueElement(queueFileName) {
         .catch((err) => log(err));
 }
 
-//TODO deal with illegal characters
+// changes illegal characters for underscore
 function characterPrison(phrase) {
     let illegalChars = /[/?<>\:*"]/g;
     return phrase.replace(illegalChars, '_');
@@ -87,182 +84,200 @@ fs.readfileAsync = (filename) => {
     })
 };
 
-// TODO
-// function checking if data folder exists and creating them at every initial run
-
-function deleteAndSearch(elementId) {
+const deleteAndSearch = (elementId) => {
     deleteSymLink(elementId, true);
-}
+};
 
-function deleteOnly(elementId) {
-    deleteSymLink(elementId, false);
-}
-
+const deleteOnly = (elementId, path) => {
+    deleteSymLink(elementId, false)
+        .then(() => { log(`${new Date(Date.now()).toISOString()} ${path} | tracks deleted`) });
+};
+// TODO add method delete folder with all its contents
 // delete existing symlink > send request > add to queue
 const deleteSymLink = async function (elementId, search) {
     const linkFile = `${linksFolder}${elementId}.json`;
     try {
         const data = await fsprom.readFile(linkFile, 'utf8');
+        const db = await loadDatabase();
         const parsed = JSON.parse(data);
         const extractedFolderPath = parsed.link.slice(0, parsed.link.lastIndexOf('\\'));
         const extractedFilePath = parsed.link;
-        const originalFilePath = parsed.file;
-        // delete symlink
-        await fsprom.unlink(extractedFilePath);
-        // delete symlink folder
-        await fsprom.rmdir(extractedFolderPath);
-        // delete file containing information about link
-        await fsprom.unlink(linkFile);
+        await fsprom.readdir(extractedFolderPath) // delete all files from symlink folder
+            .then((files) => {
+                for (const file of files.values()) {
+                    fsprom.unlink(extractedFolderPath + '\\' + file)
+                        .catch((err) => { log(err) });
+                }
+            })
+            .then(() => {
+                fsprom.rmdir(extractedFolderPath); // delete symlink folder
+                fsprom.unlink(linkFile); // delete file containing information about link
+            })
+            .catch((err) => { log(err) });
         log(`${new Date(Date.now()).toISOString()} ${extractedFilePath} link deleted.`);
-        if (search) {
-            // create look up object
-            const lookUpObject = {
-                id: elementId,
-                path: originalFilePath
-            }
-            // get results for given object
-            request.titlesLookUp(lookUpObject);
-        }
+        let newPath = db.get(elementId);
+        db.delete(elementId); // delete path from databse
+        await saveDatabase(db);
+        if (search){
+            // dirWatcher.addPathElement(newPath); // add element to search queue
+        } 
     } catch (err) {
         if (err.code === 'ENOENT' && err.path === linkFile) {
             log(`${new Date(Date.now()).toISOString()} | ${linkFile} | no links for this file found`);
         }
         log(err);
     }
-}
+};
 
-function unique(arr) {
-    let flags = {};
-    var emptyArr = arr.filter(elem => {
-        if (flags[elem.path]) {
-            return false;
-        }
-        flags[elem.path] = true;
-        return true;
-    })
-    // log(emptyArr);
-    return emptyArr;
-}
+// let testLink = 'ht5dts4xOs';
+// deleteSymLink(testLink);
 
-const cleanUp = async function () {
-    try {
-        // get the files from db
-        const data = await fsprom.readFile(filesList, 'utf8');
-        const parsed = JSON.parse(data);
-        let dirCounter = 0;
-        // runs access check on all the paths in the given file
-        const tempArr = await Promise.all(parsed.map(async (elem) => {
-            try {
-                // try to check acces to every file, on error checks if file is missing
-                await fsprom.access(elem.path);
-                // on success it returns the same element
-                return elem;
-            } catch (err) {
-                // if file is not found, element is marked with 'delete' statement and returned
-                if (err.code === 'ENOENT') {
-                    log(`[cleanUp][${elem.path}] not found`);
-                    dirCounter++;
-                    return elem = { id: elem.id, path: 'delete' };
-                }
-            }
-        }))
-        log(`[cleanUp] Directory checkup finished, found ${dirCounter} invalid directories.`);
-        let linkCounter = 0;
-        /// deletes all elements from queue, that have been marked above
-        tempArr.forEach((elem) => {
-            const qe = `${queueFolder}${elem.id}.json`;
-            if (elem.path === 'delete') {
-                linkCounter++;
-                fsprom.unlink(qe)
-                    .catch(err => {
-                        if (err.code === 'ENOENT') {
-                            log(`[cleanUp][${qe}] ignored non existing file`);
-                        } else {
-                            log(`[cleanUp]${err}`)
-                        }
-                    })
-            }
+// save db to file, takes map as argument, returns promise
+const saveDatabase = (map) => {
+    let output = Object.fromEntries(map);
+    return fsprom.writeFile(filesList, JSON.stringify(output));
+    // .then(() => { log(`${new Date(Date.now()).toISOString()} [file service] database saved`) })
+    // .catch((err) => {
+    //     log(err);
+    //     log()
+    // });
+};
+
+const loadDatabase = () => {
+    const tempMap = new Map();
+    return fsprom.readFile(filesList, 'utf8')
+        .then((data) => {
+            let obj = JSON.parse(data);
+            for (const [key, value] of Object.entries(obj)) { tempMap.set(key, value); }
+            return tempMap;
         })
-        log(`[cleanUp] ${linkCounter} invalid queue links deleted.`)
-        // delete objects pointing to non existing files
-        const output = tempArr.filter((el) => { return el.path != 'delete' });
-        // get list of files from queue folder
-        const files = await fsprom.readdir(queueFolder);
-        linkCounter = 0;
-        // delete all queue files that are not present in db
-        for (const file of files) {
-            if (output.find(x => x.id === file.split('.')[0]) === undefined) {
-                linkCounter++;
-                fsprom.unlink(queueFolder + file)
-                    .then(() => {
-                        log(`[cleanUp] File ${file} deleted`);
-                    });
-            }
-        }
-        log(`[cleanUp] ${linkCounter} invalid queue links deleted.`);
-        // save new file decsriptors to file
-        await fsprom.writeFile(filesList, JSON.stringify(output));
-    } catch (err) {
-        log(`[cleanUp]${err}`);
+        .catch((err) => {
+            // log(err);
+            log(`[loadDB] Error: wrong data input or missing file`);
+            return tempMap;
+        });
+};
+
+const loadQueueElement = (queueFileName) => {
+    return fsprom.readFile(queueFileName, 'utf8')
+        .then((data) => {
+            let obj = JSON.parse(data);
+            return obj;
+        })
+        .catch((err) => {
+            // log(err);
+            log(`[loadQueue] Error: wrong data input or missing file`);
+            let empty = { 'title': '', 'link': '', 'desc': '' }; // in case of strange behaviour return empty object
+            return empty;
+        })
+};
+
+// finds given value inside given map, returns key for given value otherwise returns null
+const findInMap = (map, value) => {
+    for (const key of map.keys()) {
+        if (map.get(key) === value) return key;
     }
-}
+    return null;
+};
 
-// deleteSymLink('-lckiv7nQf');
-const createSymLink = async (elementId, queueElementIndex) => {
-    try {
-        const fileData = await fsprom.readFile(filesList, 'utf8');
-        diskData = JSON.parse(fileData);
-
-        // check if object with given id is present on the list retrieved from a file
-        let objectById = diskData.find(x => x.id === elementId);
-        if (objectById === undefined) {
-            log(`[createSymLink] No matching objects found in file: ${filesList}`);
-            // delete from queue
-            const queueFileName = `${queueFolder}${elementId}.json`;
-            deleteQueueElement(queueFileName);
-        } else {
-            // get file path
-            let objectPath = objectById.path;
-            // extract file extension
-            let objectExtension = objectPath.slice(objectPath.lastIndexOf('.'), objectPath.length);
-            // relative path
-            const queueFileName = `${queueFolder}${elementId}.json`;
-            // get result values from file with matching id
-            const qdata = await fsprom.readFile(queueFileName, 'utf8');
-            let queueElementResults = JSON.parse(qdata);
-            // create symlink path with given element index
-            const symLinkFolder = createSymLinkFolder(queueElementResults[queueElementIndex]);
-            const symLinkPath = createSymLinkPath(queueElementResults[queueElementIndex], objectExtension);
-            fsprom.mkdir(symLinkFolder)
-                .finally(() => {
-                    fsprom.symlink(objectPath, symLinkPath)
-                        .then(() => {
-                            // save symlink info - operation id, original file path and symlink path
-                            saveSymlinkInfo(objectPath, symLinkPath, elementId);
-                            log('[createSymLink]', new Date(Date.now()), symLinkPath, '| link created.');
-                            // delete queue file
-                            deleteQueueElement(queueFileName);
-                        })
-                        .catch((err) => {
-                            if (err && err.code === 'EEXIST') {
-                                log(`[createSymLink][${symLinkPath}] Symlink already exists!`);
-                            } else {
-                                log(`[createSymLink][${symLinkPath}] ${err}`);
-                            }
-                        })
+/* 
+    Removes wrongfuly created queue files and invalid elements from database.
+*/
+const cleanUp = async function () {
+    const parsed = await loadDatabase();
+    let dirCounter = 0;
+    /* 
+       Runs access check on all the paths in the given file.
+       Always reports first element, which is object with empty id and empty path. 
+    */
+    for (const key of parsed.keys()) {
+        await fsprom.access(parsed.get(key)) // check access to file
+            .catch((err) => {
+                if (err.code === 'ENOENT') {
+                    log(`[cleanUp][${parsed.get(key)}] not found`);
+                    dirCounter++;
+                    parsed.set(key, 'delete'); // on error mark element for deletion
+                }
+            });
+    }
+    log(`[cleanUp] Directory checkup finished, found ${dirCounter} invalid directories.`);
+    let linkCounter = 0;
+    /* 
+        For every invalid path found in database, delete queue file pointing to that path.
+    */
+    for (const key of parsed.keys()) { // deletes all elements from queue, that have been marked above
+        const qe = `${queueFolder}${key}.json`;
+        if (parsed.get(key) === 'delete') {
+            parsed.delete(key);
+            linkCounter++;
+            fsprom.unlink(qe)
+                .then((qe) => {
+                    log(`[cleanUp][queue] ${qe} invalid queue file deleted.`)
                 })
                 .catch((err) => {
-                    log(`[createSymLink][${symLinkFolder}]${err}`);
-                })
-        };
-    } catch (err) {
-        if (err.code == 'ENOENT') {
-            log(`[createSymLink][readFile] ${filesList} file does not exsist!`);
-            return;
+                    if (err.code === 'ENOENT') log(`[cleanUp][${qe}] ignored non existing file`);
+                    else log(`[cleanUp]${err}`)
+                });
         }
-        log(err);
     }
+    linkCounter = 0;
+    /* 
+        Delete every file queue file that doesn't appear in database.
+    */
+    fsprom.readdir(queueFolder) // delete queue files absent from db
+        .then((files) => {
+            for (const file of files) {
+                let key = file.split('.')[0];
+                if (parsed.get(key) === undefined) {
+                    linkCounter++;
+                    fsprom.unlink(queueFolder + file)
+                        .then(() => { log(`[cleanUp] File ${file} deleted`); })
+                }
+            }
+            log(`[cleanUp][not in db] ${linkCounter} invalid queue links found.`);
+        });
+    /* 
+        Save new file descriptors to database.
+    */
+    saveDatabase(parsed);
+};
 
+const createFolder = async (folderName) => {
+    return fsprom.mkdir(folderName)
+        .catch((err) => {
+            log(`[createSymLink][${folderName}] ${err}`);
+        })
+};
+
+/* 
+    Creates symlink folder and file with given arguments, element id and array index.
+    When successful, creates link file containing both original file path and symlink file path.
+    Finally, deletes queue file with given id.
+*/
+const createSymLink = async (elementId, queueElementIndex) => {
+    const diskData = await loadDatabase();
+    // check if object with given id is present on the list retrieved from a file
+    const queueFileName = `${queueFolder}${elementId}.json`;
+    if (diskData.get(elementId) === undefined) {
+        log(`[createSymLink] No matching objects found in file: ${filesList}`);
+    } else {
+        let objectPath = diskData.get(elementId); // get path
+        let objectExtension = objectPath.slice(objectPath.lastIndexOf('.'), objectPath.length); // extract extension
+        const queueElementResults = await loadQueueElement(queueFileName); // get queue file
+        const symLinkFolder = createSymLinkFolder(queueElementResults[queueElementIndex]); // create symlink folder
+        const symLinkPath = createSymLinkPath(queueElementResults[queueElementIndex], objectExtension); // create symlink path
+        await createFolder(symLinkFolder);
+        fsprom.symlink(objectPath, symLinkPath)
+            .then(() => {
+                saveSymlinkInfo(objectPath, symLinkPath, elementId); // save symlink info - operation id, original file path and symlink path
+                log('[createSymLink]', new Date(Date.now()), symLinkPath, '| link created.');
+            })
+            .catch((err) => {
+                if (err && err.code === 'EEXIST') { log(`[createSymLink][${symLinkPath}] Symlink already exists!`); }
+                else { log(`[createSymLink][${symLinkPath}] ${err}`); }
+            })
+    }
+    deleteQueueElement(queueFileName);
 }
 
-module.exports = { createSymLink, deleteSymLink, cleanUp, deleteOnly }
+module.exports = { createSymLink, deleteSymLink, cleanUp, deleteOnly, saveDatabase, loadDatabase, findInMap }

@@ -1,4 +1,4 @@
-const fs = require('fs');
+const fs = require('fs').promises;
 const cheerio = require('cheerio');
 
 var fileName = 'Haxan.1922.by.lutfucan.html';
@@ -86,18 +86,44 @@ var getResultsList = async (htmlSource) => {
     })
 }
 
-// test cheerio parser reading data from a file
-function testFileReader(fileName) {
-    fs.readFile(fileName, function (err, data) {
-        if (err) {
-            return console.log(err);
+let proxyTableId = '#proxylisttable';
+// parsing proxy from web
+var parseProxyList = async (htmlSource) => {
+    return new Promise((resolve, reject) => {
+        let $ = cheerio.load(htmlSource);
+        let proxyList = [];
+        let table = $(`${proxyTableId} > tbody >  tr`);
+        if (table.text().length != 0) {
+            table.each((index, element) => {
+                let tempObj = {
+                    'ipAddress': $($(element).find('td')[0]).text(),
+                    'port': $($(element).find('td')[1]).text(),
+                    'code': $($(element).find('td')[2]).text(),
+                    'country': $($(element).find('td')[3]).text(),
+                    'anonymity': $($(element).find('td')[4]).text(),
+                    'google': $($(element).find('td')[5]).text(),
+                    'https': $($(element).find('td')[6]).text()
+                }
+                proxyList[index] = tempObj;
+            });
+            resolve(proxyList);
+        } else {
+            log(`[module] Error, id: "${proxyTableId}" not found in the document.`)
+            reject(proxyList);
         }
-        var output = getResultsList(data.toString());
-        console.log(output);
     })
+}
+
+
+// test cheerio parser reading data from a file
+var testFileReader = async (fileName) => {
+    const data = await fs.readFile(fileName);
+    // var output = getResultsList(data.toString());
+    var output = await parseProxyList(data.toString());
+    console.log(output.length);
+
 };
 
+// testFileReader('./test/proxylist.lst');
 
-// testFileReader(fileName);
-
-module.exports = { getResultsList, testFileReader };
+module.exports = { getResultsList, parseProxyList, testFileReader };
