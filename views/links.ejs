@@ -4,51 +4,56 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Scan folders 1.0</title>
-    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/css/teststyle.css">
+    <link href="/icon/all.css" rel="stylesheet">
+    <!-- <script src="https://kit.fontawesome.com/6cf0f9f84b.js" crossorigin="anonymous"></script> -->
 </head>
 
 <body>
-    <nav>
-        <a href="/">queue</a>
-        <a href="/links">links</a>
-        <a href="/setup">setup</a>
-    </nav>
+    <div class="grid-container">
+        <div class="grid-header">
+            <nav>
+                <a class="nav-top--other" href="/"><i class="fas fa-chevron-right"></i>Queue</a>
+                <a class="nav-top--current" href="/links"><i class="fas fa-chevron-right"></i>Links</a>
+                <a class="nav-top--other" href="/setup"><i class="fas fa-chevron-right"></i>Options</a>
+            </nav>
+            <div class="grid-results--info">
 
-    <% if (links.length> 0) { %>
-        <h2>There are <%= links.length %> created links.</h2>
-
-        <table>
-            <tr>
-                <th>Index</th>
-                <th>Original file</th>
-                <th>separator</th>
-                <th>Symlink</th>
-                <th>Repeat search</th>
-            </tr>
-            <% links.forEach((linkObj, linkIndex)=> { %>
-                <form action="/links" method="POST">
-                <tr>
-                    <input type="hidden" name="id" value="<%= linkObj.id%>">
-                    <td>
-                        <%= linkIndex %>
-                    </td>
-                    <td>
-                        <%= linkObj.file %>
-                    </td>
-                    <td>-></td>
-                    <td>
-                        <%= linkObj.link %>
-                    </td>
-                    <td>
-                        <button type="submit">Go!</button>
-                    </td>
-                </tr>
-                </form>
-                <% }) %>
-        </table>
-        <% } else { %>
-            <p>There are no links to show.</p>
-            <% } %>
+                <span>There are <%= links.length %> created links.</span>
+            </div>
+        </div>
+        <div class="grid-results">
+            <% if (links.length> 0) { %>
+                
+                <!-- add filter on top of the list -->
+                <div class="grid-links">
+                    <div class="grid-links-filter">
+                        <span>filter</span>
+                    </div>
+                    <div class="grid-links-element">
+                        <% links.forEach((linkObj, linkIndex)=> { %>
+                            <ul>
+                                <li>
+                                    <form class="grid-links--form" action="/links" method="post">
+                                        <input type="hidden" name="id" value="<%= linkObj.id%>">
+                                        <div class="grid-links--path">
+                                            <%= linkObj.file %>
+                                        </div>
+                                        <i class="fas fa-link"></i>
+                                        <div class="grid-links--symlink">
+                                            <%= linkObj.link %>
+                                        </div>
+                                        <button type="submit">as</button>
+                                    </form>
+                                </li>
+                            </ul>
+                            <% }) %>
+                    </div>
+                </div>
+                <% } else { %>
+                    <p>There are no links to show.</p>
+                    <% } %>
+        </div>
 </body>
 
 </html>

@@ -57,8 +57,11 @@ function createSymLinkFolder(n) {
 }
 
 // creates symlink absolute path
-function createSymLinkPath(n, fileExt) {
+function createSymLinkPath(n, fileExt, part) {
     friendlyTitle = characterPrison(n.title);
+    if (part !== 0) {
+        friendlyTitle = friendlyTitle + '-disc' + part;
+    }
     return symLinkFolder + friendlyTitle + '\\' + friendlyTitle + ' [tmbdid=' + n.link + ']' + fileExt;
 }
 
@@ -118,9 +121,9 @@ const deleteSymLink = async function (elementId, search) {
         let newPath = db.get(elementId);
         db.delete(elementId); // delete path from databse
         await saveDatabase(db);
-        if (search){
+        if (search) {
             // dirWatcher.addPathElement(newPath); // add element to search queue
-        } 
+        }
     } catch (err) {
         if (err.code === 'ENOENT' && err.path === linkFile) {
             log(`${new Date(Date.now()).toISOString()} | ${linkFile} | no links for this file found`);
@@ -242,12 +245,52 @@ const cleanUp = async function () {
     saveDatabase(parsed);
 };
 
+
+/* 
+    Creates folder with given full path, only if it doesn't exist.
+*/
 const createFolder = async (folderName) => {
-    return fsprom.mkdir(folderName)
-        .catch((err) => {
-            log(`[createSymLink][${folderName}] ${err}`);
+    let folderExists = await fsprom.access(folderName)
+        .then(() => {
+            return true;
         })
+        .catch(() => {
+            return false;
+        })
+    if (folderExists) {
+        log(`[createFolder]${folderName} already exists`)
+    } else {
+        return fsprom.mkdir(folderName)
+            .catch((err) => {
+                log(`[createFolder][${folderName}] ${err}`);
+            })
+    }
 };
+
+/* 
+    Regular expression list containint phrases that may occur in the file name, in case of movies split into multiple files.
+*/
+const regexArr = [/cd[^A-Za-z]?\d/i, /disc[^A-Za-z]?\d/i, /part[^A-Za-z]?\d/i, /chapter[^A-Za-z]?\d/i, /s\d\de\d\d/i];
+
+/* 
+    Checks if given file name (with full path) contains a movie split into parts. 
+    If so, returns part number extracted from a file name, else returns 0.
+*/
+const getDiscNumber = (path) => {
+    let fileName = path.slice(path.lastIndexOf('\\') + 1, path.lastIndexOf('.')).toLowerCase();
+    for (i = 0; i < regexArr.length; i++) {
+        let expression = regexArr[i];
+        let result = fileName.match(expression);
+        if (result !== null && i < 4) {
+            let notDigit = /\D/g;
+            return result[0].replace(notDigit, ''); // extract digits from found phrase
+        }
+        if (result !== null && i >= 4) {
+            return result[0].substring(5); // extract last character from found phrase
+        }
+    }
+    return 0;
+}
 
 /* 
     Creates symlink folder and file with given arguments, element id and array index.
@@ -264,8 +307,9 @@ const createSymLink = async (elementId, queueElementIndex) => {
         let objectPath = diskData.get(elementId); // get path
         let objectExtension = objectPath.slice(objectPath.lastIndexOf('.'), objectPath.length); // extract extension
         const queueElementResults = await loadQueueElement(queueFileName); // get queue file
+        let discNumber = getDiscNumber(objectPath); // get part number if movie has been split, else return 0
         const symLinkFolder = createSymLinkFolder(queueElementResults[queueElementIndex]); // create symlink folder
-        const symLinkPath = createSymLinkPath(queueElementResults[queueElementIndex], objectExtension); // create symlink path
+        const symLinkPath = createSymLinkPath(queueElementResults[queueElementIndex], objectExtension, discNumber); // create symlink path
         await createFolder(symLinkFolder);
         fsprom.symlink(objectPath, symLinkPath)
             .then(() => {

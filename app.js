@@ -75,6 +75,7 @@ function getLinksFile(filename) {
 
 //TODO
 // setup endpoint
+// TODO set default naming convention, prompt user to inpu custom naming pattern
 app.get('/setup', (req, res) => {
     const links = {
         symlink: symLinkFolder,
@@ -111,7 +112,7 @@ app.get('/', async (req, res) => {
             if (path === undefined) log(`[app.get('/')] ID [${elem}] not found in database.json!`);
             return { id: elem, filepath: path, results: queueResults[index] };
         });
-        res.render('index', { queueArray });
+        res.render('test', { queueArray });
     } else {
         res.redirect('/setup');
     }
@@ -134,8 +135,16 @@ const compareSearchObject = (obj) => {
     };
 }
 
+//TODO add multi version movies
+/* 
+    regural
+    uncut
+    director's cut
+    unrated
+    
+*/
 app.post('/', async (req, res) => {
-    log(`[app.post('/']${req.body}`);
+    log('[post] ' + req.body);
     let selection = req.body;
     if (selection.type === 'search') {
         // check if this exact selection was performed last time

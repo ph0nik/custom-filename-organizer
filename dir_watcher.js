@@ -47,26 +47,55 @@ const getPathObject = (path) => {
 
 const pathQueue = new FileQueue(); // new files queue
 
+
+/* 
+    Returns random number defined range.
+*/
+const getRandomDelay = () => {
+    let min = 3000;
+    let max = 6000;
+    return Math.floor(Math.random() * (max - min)) + min;
+}
+
+/* 
+TODO after threee 403 responses wait longer and send dummy request, then wait and retry.
+*/
+
+let proxyListIndex = 0;
+/* 
+    Cycles through all elements in the queue and sends request for each one,
+    with randomly generated delay .
+*/
 const updateFilesList = async () => {
     try {
+        const proxyList = await request.filterProxyList();
         const diskData = await fileService.loadDatabase();
         let errorCode = 200;
         let elementCount = 0;
         while (pathQueue.hasNext() && errorCode === 200) {
+            if (proxyListIndex >= proxyList.length) {
+                proxyListIndex = 0;
+            }
+            let proxyObj = proxyList[proxyListIndex];
+            let proxyAdd = 'https://' + proxyObj.ipAddress + ':' + proxyObj.port;
             let path = pathQueue.dequeue();
             if (fileService.findInMap(diskData, path) !== null) {
                 log(`${new Date(Date.now()).toISOString()} | ${path} | ignored`);
             } else {
                 log(`${new Date(Date.now()).toISOString()} | ${path} | new element`); // send request for every new element
                 const id = nanoid.nanoid(10); // genrate random identifier    
-                const temp = await request.titlesLookUp(path, id);
-                await sleep(5000);
-                // const temp = await request.titlesLookUp(path, id);
+                log(proxyAdd);
+                const temp = await request.titlesLookUp(path, id, proxyAdd);
+                // await sleep(getRandomDelay());                
                 errorCode = temp;
+                proxyListIndex++;
                 if (errorCode === 200) {
                     diskData.set(id, path); // on any error response from server do not save data to disk        
                     elementCount++;
+                } else {
+                    pathQueue.enqueue(path); // on failed attempt return element to the end of the queue
                 }
+                await sleep(500);
             }
         }
         fileService.saveDatabase(diskData)
@@ -100,12 +129,20 @@ const deleteSymLink = async (path) => {
 }
 
 /* 
-    Return list of watch folders based on list of extensions and directory
+    Return list of watch folders based on list of extensions and list directories
 */
-const getExtensions = () => {
-    let sourceDir = 'G:/JavaScript/disk-crawler/test/watchlist/**/*.';
+const getExtensions = (input) => {
+    let foldersList = input.map(folder => folder + '/**/*.');
+    // let sourceDir = 'G:/JavaScript/disk-crawler/test/watchlist/**/*.';
     let extensions = config.extensions;
-    return extensions.map(ext => sourceDir + ext);
+    let output = [];
+    foldersList.forEach(dir => {
+        extensions.forEach(ext => {
+            output.push(dir + ext);
+        })
+    });
+    return output;
+    // return extensions.map(ext => sourceDir + ext);
 }
 
 const addPathElement = (path) => {
@@ -125,6 +162,7 @@ const getWatchedList = async (watcherObject, interval) => {
             watchObjStates = watcherObject._eventsCount; // update events count
             let regex = /^[\w,\s-,\.]+\.[A-Za-z]{2,4}$/;
             let keys = Object.keys(input);
+            // log(input);
             for (const key of keys.values()) {
                 for (const val of input[key].filter(el => el.match(regex)).values()) {
                     let path = key + '\\' + val;
@@ -140,18 +178,14 @@ const getWatchedList = async (watcherObject, interval) => {
     }
 }
 
+let testDirList = ['G:/JavaScript/disk-crawler/test/watchlist', 'E:/Filmy SD'];
+
 // defines watcher object
-const watcher = chokidar.watch(getExtensions(), {
+const watcher = chokidar.watch(getExtensions(testDirList), {
     ignored: /(^|[\/\\])\../,
     persistent: true,
     awaitWriteFinish: false
 });
-
-// TODO let chokidar collect new files and periodically read its base to extract files to the queue
-// use glob patterns
-// trigger collect function on server get method - everytime user loads up interface
-// find sweet spot for interval time reloading method in background
-
 
 // starts the watcher with specified actions on different events
 const loadChokidar = () => {
@@ -159,15 +193,11 @@ const loadChokidar = () => {
         .on('add', async (path) => { // in case of file added
             if (isVideoFile(path)) {
                 log(`${new Date(Date.now()).toISOString()} | ${path} | added`);
-                // testFileQueue.enqueue(path); // call method with path only!!!!
-
             }
         })
         .on('change', path => {
             if (isVideoFile(path)) {
                 log(`${new Date(Date.now()).toISOString()} | ${path} | changed`);
-                // testFileQueue.enqueue(path);
-                // updateFilesList();
             }
         })
         // in case of file delete
